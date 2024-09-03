@@ -4,6 +4,7 @@ import torch.distributed
 from torch import Tensor
 import torchvision
 
+torchvision.disable_beta_transforms_warning()
 import torchvision.transforms.v2 as T2
 import torchvision.transforms.v2.functional as F2
 
@@ -14,12 +15,11 @@ import PIL.Image
 from typing import Any, Dict, List, Optional
 
 
-torchvision.disable_beta_transforms_warning()
-
 import importlib.metadata
 from torch import Tensor
 
-if importlib.metadata.version("torchvision") == "0.15.2":
+
+if importlib.metadata.version("torchvision") >= "0.15.2":
     import torchvision
 
     torchvision.disable_beta_transforms_warning()
