@@ -10,8 +10,11 @@ from src.matcher import HungarianMatcher
 from src.postprocessor import RTDETRPostProcessor
 from src.collator import BatchImageCollateFuncion
 from src.criterion import RTDETRCriterionv2
+from src.optimizer import ModelEMA, AdamW, MultiStepLR, LinearWarmup
 from torch.utils.data import DataLoader
 import argparse
+from torch.cuda.amp.grad_scaler import GradScaler
+from src.utils import get_optim_params
 
 
 def load_config(config_path):
@@ -21,9 +24,8 @@ def load_config(config_path):
     return config
 
 
-def get_model(config_path):
+def get_model(config):
     """Build and return the model based on the configuration file."""
-    config = load_config(config_path)
     backbone_params = config["PResNet"]
     encoder_params = config["HybridEncoder"]
     decoder_params = config["RTDETRTransformerv2"]
@@ -75,9 +77,8 @@ def get_model(config_path):
     return RTDETR(backbone=backbone, encoder=encoder, decoder=decoder)
 
 
-def get_criterion(config_path):
+def get_criterion(config):
     """Build and return the criterion based on the configuration file."""
-    config = load_config(config_path)
     num_classes = config["num_classes"]
     criterion_params = config["RTDETRCriterionv2"]
     matcher_params = criterion_params["matcher"]
@@ -101,9 +102,45 @@ def get_criterion(config_path):
     )
 
 
-def get_postprocessor(config_path):
+def get_postprocessor(config):
     """Build and return the postprocessor based on the configuration file."""
-    config = load_config(config_path)
     num_classes = config["num_classes"]
     num_top_queries = config["num_top_queries"]
     return RTDETRPostProcessor(num_classes=num_classes, num_top_queries=num_top_queries)
+
+
+def get_ema(config, model):
+    """Build and return the ema based on the configuration file."""
+    ema_params = config["ema"]
+    ema_decay = ema_params["decay"]
+    ema_warmups = ema_params["warmups"]
+    return ModelEMA(model=model, decay=ema_decay, warmups=ema_warmups)
+
+
+def get_scaler():
+    return GradScaler
+
+
+def get_optimizer(config, model):
+    optim_conf_params = config["optimizer"]
+    model_params = get_optim_params(optim_conf_params, model)
+    return AdamW(params=model_params)
+
+
+def get_lr_schedulers(config, optimizer):
+    lr_scheduler_params = config["lr_scheduler"]
+    lr_warmup_scheduler_params = config["lr_warmup_scheduler"]
+    lr_milestones = lr_scheduler_params["milestones"]
+    lr_gamma = lr_scheduler_params["gamma"]
+    warmup_duration = lr_warmup_scheduler_params["warmup_duration"]
+    lr_scheduler = MultiStepLR(
+        optimizer=optimizer, milestones=lr_milestones, gamma=lr_gamma
+    )
+    lr_warmup_scheduler = LinearWarmup(
+        lr_scheduler=lr_scheduler, warmup_duration=warmup_duration
+    )
+    return lr_scheduler, lr_warmup_scheduler
+
+
+def train_one_epoch():
+    pass
