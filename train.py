@@ -257,8 +257,8 @@ def save_model(model, optimizer, out_dir, **kwargs):
     )
 
     print(
-        "\nSaving best model for epoch: {0} ; BEST Val loss : {1:.4f}\n".format(
-            epoch, val_loss
+        "\nSaving {0} model for epoch: {1} ; Val loss : {2:.4f}\n".format(
+            sv_type, epoch, val_loss
         )
     )
 
@@ -404,7 +404,7 @@ def train(config_path):
                 )
             )
 
-            #TODO
+            # TODO
             # --------------
             #   Plot Samples ???
             # --------------
