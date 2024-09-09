@@ -93,7 +93,7 @@ ema:
   warmups: 2000
 
 
-epoches: 72
+epochs: 72
 clip_max_norm: 0.1
 
 optimizer:
@@ -123,70 +123,95 @@ lr_warmup_scheduler:
 
 
 
-output_dir: ./output/rtdetrv2_r50vd_6x_coco
+# output_dir: ./output/rtdetrv2_r50vd_6x_coco
 
 
 # dataloader params
 train_dataloader: 
-  dataset: 
-    transforms:
-      ops:
-        - {type: RandomPhotometricDistort, p: 0.5}
-        - {type: RandomZoomOut, fill: 0}
-        - {type: RandomIoUCrop, p: 0.8}
-        - {type: SanitizeBoundingBoxes, min_size: 1}
-        - {type: RandomHorizontalFlip}
-        - {type: Resize, size: [640, 640], }
-        - {type: SanitizeBoundingBoxes, min_size: 1}
-        - {type: ConvertPILImage, dtype: 'float32', scale: True}   
-        - {type: ConvertBoxes, fmt: 'cxcywh', normalize: True}
-      policy:
-        name: stop_epoch
-        epoch: 71 # epoch in [71, ~) stop `ops`
-        ops: ['RandomPhotometricDistort', 'RandomZoomOut', 'RandomIoUCrop']
-  
-  collate_fn:
-    type: BatchImageCollateFuncion
-    scales: [480, 512, 544, 576, 608, 640, 640, 640, 672, 704, 736, 768, 800]
-    stop_epoch: 71 # epoch in [71, ~) stop `multiscales`
-
+  # # type: DataLoader
+  # dataset: 
+  #   # type: VOCDetection
+  #   # root: ./dataset/voc/
+  #   # ann_file: trainval.txt
+  #   # label_file: label_list.txt
+  #   transforms:
+  #     # type: Compose
+  #     ops:
+  #       - {type: RandomPhotometricDistort, p: 0.5}
+  #       - {type: RandomZoomOut, fill: 0}
+  #       - {type: RandomIoUCrop, p: 0.8}
+  #       - {type: SanitizeBoundingBoxes, min_size: 1}
+  #       - {type: RandomHorizontalFlip}
+  #       - {type: Resize, size: [640, 640], }
+  #       - {type: SanitizeBoundingBoxes, min_size: 1}
+  #       - {type: ConvertPILImage, dtype: 'float32', scale: True}   
+  #       - {type: ConvertBoxes, fmt: 'cxcywh', normalize: True}
+  #     policy:
+  #       name: stop_epoch
+  #       epoch: 71 # epoch in [71, ~) stop `ops`
+  #       ops: ['RandomPhotometricDistort', 'RandomZoomOut', 'RandomIoUCrop']
+  dataset_root : 'D:\\data\\__OTHERDATA__\\OD_Foundation_data\\train'
+  mode : "train"
+  num_imgs_per_folder : 10000
   shuffle: True
   total_batch_size: 16 # total batch size equals to 16 (4 * 4)
   num_workers: 4
+  drop_last: True 
+  # collate_fn:
+  #   type: BatchImageCollateFuncion
+  #   # scales: [480, 512, 544, 576, 608, 640, 640, 640, 672, 704, 736, 768, 800]
+  #   scales: [320, 352, 384, 416, 480, 512, 512, 512, 544, 576, 608, 640, 672]
+  #   # scales: [96, 128, 160, 192, 224, 256, 256, 256, 288, 320, 352, 384, 416]
+  #   stop_epoch: 71 # epoch in [71, ~) stop `multiscales`
+
+
 
 
 val_dataloader:
-  dataset: 
-    transforms:
-      ops: 
-        - {type: Resize, size: [640, 640]}
-        - {type: ConvertPILImage, dtype: 'float32', scale: True}   
+  # # type: DataLoader
+  # dataset: 
+  #   # type: VOCDetection
+  #   # root: ./dataset/voc/
+  #   # ann_file: test.txt
+  #   # label_file: label_list.txt
+  #   transforms:
+  #     # type: Compose
+  #     ops: 
+  #       - {type: Resize, size: [640, 640]}
+  #       - {type: ConvertPILImage, dtype: 'float32', scale: True}
+  dataset_root : 'D:\\data\\__OTHERDATA__\\OD_Foundation_data\\val'
+  mode : "val"
+  num_imgs_per_folder : 1000
   shuffle: False
   total_batch_size: 32
   num_workers: 4
+  drop_last: False
+  # collate_fn:
+  #   type: BatchImageCollateFuncion
+    
 
 
-# runtime params
-print_freq: 100
-output_dir: './logs'
-checkpoint_freq: 1
+
 
 
 sync_bn: True
 find_unused_parameters: False
 
 
-use_amp: False
+# use_amp: False
 scaler:
   type: GradScaler
   enabled: True
 
 
-use_ema: False
-ema:
-  type: ModelEMA
-  decay: 0.9999
-  warmups: 2000
+# use_ema: False
+# ema:
+#   type: ModelEMA
+#   decay: 0.9999
+#   warmups: 2000
+
+
+
 
 # voc detection params
 
@@ -197,36 +222,14 @@ evaluator:
   iou_types: ['bbox', ]
 
 num_classes: 20
-
-train_dataloader: 
-  type: DataLoader
-  dataset: 
-    type: VOCDetection
-    root: ./dataset/voc/
-    ann_file: trainval.txt
-    label_file: label_list.txt
-    transforms:
-      type: Compose
-      ops: ~
-  shuffle: True
-  num_workers: 4
-  drop_last: True 
-  collate_fn:
-    type: BatchImageCollateFuncion
-
-
-val_dataloader:
-  type: DataLoader
-  dataset: 
-    type: VOCDetection
-    root: ./dataset/voc/
-    ann_file: test.txt
-    label_file: label_list.txt
-    transforms:
-      type: Compose
-      ops: ~
-  shuffle: False
-  num_workers: 4
-  drop_last: False
-  collate_fn:
-    type: BatchImageCollateFuncion
+seed : 1234
+# runtime params
+print_freq: 100
+output_dir: './ckpts'
+plot_dir : './ckpts/plots'
+log_dir : './ckpts/logs'
+checkpoint_freq: 10
+plot_freq: 10
+resume_path : None
+start_epoch : 0
+expt_name : 'trial'
