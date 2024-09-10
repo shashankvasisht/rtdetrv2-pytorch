@@ -90,6 +90,8 @@ class HungarianMatcher(nn.Module):
         # Compute the classification cost. Contrary to the loss, we don't use the NLL,
         # but approximate it in 1 - proba[target class].
         # The 1 is a constant that doesn't change the matching, it can be ommitted.
+        if not tgt_ids.dtype == torch.long:
+            tgt_ids = tgt_ids.long()
         if self.use_focal_loss:
             out_prob = out_prob[:, tgt_ids]
             neg_cost_class = (

@@ -109,6 +109,9 @@ class RTDETRCriterionv2(nn.Module):
             dtype=torch.int64,
             device=src_logits.device,
         )
+
+        if not target_classes_o.dtype == torch.long:
+            target_classes_o = target_classes_o.long()
         target_classes[idx] = target_classes_o
         target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
 

@@ -14,11 +14,15 @@ try:
 except ImportError:
     from xml.etree.ElementTree import parse as ET_parse
 
+import warnings
+
+warnings.filterwarnings("ignore")
+
 
 import torch
 import torch.utils.data as data
 
-from ..src.transforms import (
+from .transforms import (
     convert_to_tv_tensor,
     Compose,
     RandomPhotometricDistort,
@@ -128,6 +132,7 @@ class GeoImageryODdata:
         root: str | Path = "data",
         mode: str = "train",  # select between 'train' and 'val'
         num_imgs_per_folder: int = 8000,
+        class_mapping_path: str = "class_mapping.yaml",
         # transforms: Optional[Callable] = None,
     ) -> None:
 
@@ -165,7 +170,7 @@ class GeoImageryODdata:
             self.images.extend(images2append)
 
         # Retrieving class mapping
-        class_mapping_path = root / "combined_class_mapping.yaml"
+        # class_mapping_path = root / "combined_class_mapping.yaml"
         with open(class_mapping_path, "r") as file:
             class_mapping = yaml.safe_load(file)
         self.class_mapping = class_mapping
@@ -199,6 +204,8 @@ class GeoImageryODdata:
         # rgbimg = rgbimg[::-1]
         rgbimg = np.dstack(rgbimg)
         img = np.dstack(img)
+
+        rgbimg = Image.fromarray(rgbimg).convert("RGB")
 
         # return rgbimg, img
         return rgbimg
@@ -251,7 +258,7 @@ class GeoImageryODdata:
     # def resize_img_boxes(image, target, tile_size):
     #     pass
 
-    def __get_item__(self, idx):
+    def __getitem__(self, idx):
 
         # get image path
         image_pth = self.images[idx]
@@ -262,8 +269,10 @@ class GeoImageryODdata:
         # read RGB image
         image = self.read_image(image_pth)
 
+        w, h = image.size
+
         # parse labels into a dictionary 'target'
-        target = self.parse_label(idx, label_pth, image.shape[0], image.shape[1])
+        target = self.parse_label(idx, label_pth, h, w)
 
         if self.transforms is not None:
             image, target, _ = self.transforms(image, target, self)
@@ -272,3 +281,8 @@ class GeoImageryODdata:
 
 
 # data = GeoImageryODdata(root=r"D:\data\__OTHERDATA__\OD_Foundation_data")
+
+
+def batch_image_collate_fn(items):
+    """only batch image"""
+    return torch.cat([x[0][None] for x in items], dim=0), [x[1] for x in items]

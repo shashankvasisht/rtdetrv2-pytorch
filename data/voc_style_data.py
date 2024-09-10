@@ -16,7 +16,7 @@ except ImportError:
 import torch
 import torch.utils.data as data
 
-from src.transforms import convert_to_tv_tensor
+from .transforms import convert_to_tv_tensor
 
 
 class DetDataset(data.Dataset):

@@ -23,7 +23,9 @@ from torch.utils.data import DataLoader
 import argparse
 from torch.cuda.amp.grad_scaler import GradScaler
 from src.utils import get_optim_params
-from data.geo_OD_data import GeoImageryODdata
+from data.geo_OD_data import GeoImageryODdata, batch_image_collate_fn
+
+import torchvision.utils as vutils
 
 
 from torch.utils.tensorboard import SummaryWriter
@@ -92,16 +94,16 @@ def get_model(config):
     encoder = HybridEncoder(
         in_channels=encoder_params["in_channels"],
         feat_strides=encoder_params["feat_strides"],
-        hidden_dim=encoder_params["feat_strides"],
-        nhead=encoder_params["feat_strides"],
-        dim_feedforward=encoder_params["feat_strides"],
-        dropout=encoder_params["feat_strides"],
-        enc_act=encoder_params["feat_strides"],
-        use_encoder_idx=encoder_params["feat_strides"],
-        num_encoder_layers=encoder_params["feat_strides"],
-        expansion=encoder_params["feat_strides"],
-        depth_mult=encoder_params["feat_strides"],
-        act=encoder_params["feat_strides"],
+        hidden_dim=encoder_params["hidden_dim"],
+        nhead=encoder_params["nhead"],
+        dim_feedforward=encoder_params["dim_feedforward"],
+        dropout=encoder_params["dropout"],
+        enc_act=encoder_params["enc_act"],
+        use_encoder_idx=encoder_params["use_encoder_idx"],
+        num_encoder_layers=encoder_params["num_encoder_layers"],
+        expansion=encoder_params["expansion"],
+        depth_mult=encoder_params["depth_mult"],
+        act=encoder_params["act"],
         # eval_spatial_size = [640,640],
     )
     decoder = RTDETRTransformerv2(
@@ -117,7 +119,7 @@ def get_model(config):
         label_noise_ratio=decoder_params["label_noise_ratio"],
         box_noise_scale=decoder_params["box_noise_scale"],
         eval_idx=decoder_params["eval_idx"],
-        aux_loss=decoder_params["aux_loss"],
+        # aux_loss=decoder_params["aux_loss"],
         cross_attn_method=decoder_params["cross_attn_method"],
         query_select_method=decoder_params["query_select_method"],
         # eval_spatial_size=[640,640],
@@ -158,7 +160,7 @@ def get_criterion(config):
 def get_postprocessor(config):
     """Build and return the postprocessor based on the configuration file."""
     num_classes = config["num_classes"]
-    num_top_queries = config["num_top_queries"]
+    num_top_queries = config["RTDETRPostProcessor"]["num_top_queries"]
     use_focal_loss = config["use_focal_loss"]
     return RTDETRPostProcessor(
         num_classes=num_classes,
@@ -211,8 +213,10 @@ def get_dataloaders(config):
     train_mode = train_dataloader_params["mode"]
     train_num_imgs_per_folder = train_dataloader_params["num_imgs_per_folder"]
 
+    class_mapping_path = config["class_mapping_path"]
+
     train_dataset = GeoImageryODdata(
-        train_datarooot, train_mode, train_num_imgs_per_folder
+        train_datarooot, train_mode, train_num_imgs_per_folder, class_mapping_path
     )
 
     val_dataloader_params = config["val_dataloader"]
@@ -224,7 +228,9 @@ def get_dataloaders(config):
     val_mode = val_dataloader_params["mode"]
     val_num_imgs_per_folder = val_dataloader_params["num_imgs_per_folder"]
 
-    val_dataset = GeoImageryODdata(val_datarooot, val_mode, val_num_imgs_per_folder)
+    val_dataset = GeoImageryODdata(
+        val_datarooot, val_mode, val_num_imgs_per_folder, class_mapping_path
+    )
 
     train_dataloader = DataLoader(
         dataset=train_dataset,
@@ -232,6 +238,8 @@ def get_dataloaders(config):
         shuffle=train_shuffle,
         num_workers=train_num_workers,
         drop_last=train_drop_last,
+        generator=torch.Generator(device="cuda"),
+        collate_fn=batch_image_collate_fn,
     )
     val_dataloader = DataLoader(
         dataset=val_dataset,
@@ -239,6 +247,8 @@ def get_dataloaders(config):
         shuffle=val_shuffle,
         num_workers=val_num_workers,
         drop_last=val_drop_last,
+        generator=torch.Generator(device="cuda"),
+        collate_fn=batch_image_collate_fn,
     )
 
     return train_dataloader, val_dataloader
@@ -248,12 +258,14 @@ def save_model(model, optimizer, out_dir, **kwargs):
 
     val_loss = kwargs.get("val_loss", 1e8)
     expt_name = str(kwargs.get("expt_name", "trial"))
-    sv_type = str(kwargs.get("svtype", "REGULAR"))
+    sv_type = str(kwargs.get("sv_type", "REGULAR"))
     epoch = kwargs.get("epoch", 1e8)
 
     save_pth = os.path.join(
         out_dir,
-        "rtdetrv2_{0}_{1}_{2:.4f}|{3}.pth".format(expt_name, sv_type, val_loss, epoch),
+        "rtdetrv2_{0}_{1}_valloss_{2:.4f}_epoch_{3}.pth".format(
+            expt_name, sv_type, val_loss, epoch
+        ),
     )
 
     print(
@@ -273,35 +285,118 @@ def save_model(model, optimizer, out_dir, **kwargs):
     )
 
 
+# def plot_and_save_batch(
+#     image_batch,
+#     pred_boxes_batch,
+#     pred_labels_batch,
+#     pred_confidences_batch,
+#     gt_boxes_batch,
+#     gt_labels_batch,
+#     output_dir,
+#     batch_id,
+# ):
+#     """
+#     Plots and saves a batch of images with bounding boxes and labels.
+
+#     Args:
+#         image_batch (torch.Tensor): A batch of image tensors with shape (N, C, H, W).
+#         pred_boxes_batch (torch.Tensor): A batch of predicted bounding boxes with shape (N, M, 4) in xyxy format.
+#         pred_labels_batch (torch.Tensor): A batch of predicted class labels with shape (N, M).
+#         pred_confidences_batch (torch.Tensor): A batch of predicted confidences with shape (N, M).
+#         gt_boxes_batch (torch.Tensor): A batch of ground truth bounding boxes with shape (N, K, 4) in xyxy format.
+#         gt_labels_batch (torch.Tensor): A batch of ground truth class labels with shape (N, K).
+#         output_dir (str): Directory to save the output images.
+#         batch_id (str): Identifier for the batch to use in the filename.
+#     """
+#     # Ensure output directory exists
+#     os.makedirs(output_dir, exist_ok=True)
+
+#     # Define colors for drawing
+#     pred_color = (255, 0, 0)  # Red for predictions
+#     gt_color = (0, 255, 0)  # Green for ground truth
+
+#     # Initialize list to store processed images
+#     processed_images = []
+
+#     for i in range(image_batch.size(0)):
+#         image_tensor = image_batch[i]
+
+#         # Convert image tensor to (H, W, C) and uint8
+#         image_tensor = image_tensor.permute(1, 2, 0).mul(255).byte()
+
+#         # Get bounding boxes and labels for this image
+#         pred_boxes = pred_boxes_batch[i]
+#         pred_labels = pred_labels_batch[i]
+#         pred_confidences = pred_confidences_batch[i]
+#         gt_boxes = gt_boxes_batch[i]
+#         gt_labels = gt_labels_batch[i]
+
+#         # Draw bounding boxes
+#         image_with_pred_boxes = vutils.draw_bounding_boxes(
+#             image_tensor,
+#             pred_boxes,
+#             colors=pred_color,
+#             labels=[
+#                 f"Pred: {label.item()} {conf:.2f}"
+#                 for label, conf in zip(pred_labels, pred_confidences)
+#             ],
+#         )
+#         image_with_all_boxes = vutils.draw_bounding_boxes(
+#             image_with_pred_boxes,
+#             gt_boxes,
+#             colors=gt_color,
+#             labels=[f"GT: {label.item()}" for label in gt_labels],
+#         )
+
+#         # Convert back to (C, H, W) and append to list
+#         image_with_all_boxes = image_with_all_boxes.permute(
+#             2, 0, 1
+#         )  # Convert to (C, H, W)
+#         processed_images.append(image_with_all_boxes)
+
+#     # Concatenate all images horizontally
+#     concatenated_image = torch.cat(processed_images, dim=2)  # Horizontal concatenation
+
+#     # Save the concatenated image
+#     output_path = os.path.join(output_dir, f"{batch_id}.png")
+#     vutils.save_image(concatenated_image, output_path)
+
+
+# # Example usage:
+# # plot_and_save_batch(image_batch, pred_boxes_batch, pred_labels_batch, pred_confidences_batch, gt_boxes_batch, gt_labels_batch, 'output', 'batch1')
+
+
 def train(config_path):
 
     config = load_config(config_path)
+    print(config)
     set_seeds(seed=config["seed"])
     device = get_device()
     out_dir, log_dir = make_outdirs(config)
     max_norm = config["clip_max_norm"]
-    resume_path = getattr(config, "resume_path", None)
-    start_epoch = getattr(config, "last_epoch", 0)
+    resume_path = config["resume_path"]
+    start_epoch = config["start_epoch"]
     epochs = config["epochs"]
     expt_name = config["expt_name"]
-    checkpoint_freq = getattr(config, "checkpoint_freq", 10)
+    checkpoint_freq = config["checkpoint_freq"]
     # plot_freq = getattr(config, "plot_freq", 10)
-    log_dir = getattr(config, "log_dir", None)
-    writer = SummaryWriter(log_dir)
+    log_dir = config["log_dir"]
+    writer = SummaryWriter(log_dir=log_dir)
 
     model = get_model(config)
     criterion = get_criterion(config)
     postprocessor = get_postprocessor(config)
     # ema = get_ema(config) if config["use_ema"] else None
     # scaler = get_scaler(config) if config["use_amp"] else None
-    optimizer = get_optimizer(config)
-    lr_scheduler, lr_warmup_scheduler = get_lr_schedulers(config)
+    optimizer = get_optimizer(config, model)
+    lr_scheduler, lr_warmup_scheduler = get_lr_schedulers(config, optimizer)
     train_dataloader, val_dataloader = get_dataloaders(config)
+
+    if resume_path is not None:
+        model.load_state_dict(torch.load(resume_path)["state_dict"], strict=True)
 
     model.to(device)
     criterion.to(device)
-    if resume_path is not None:
-        model.load_state_dict(torch.load(resume_path)["state_dict"], strict=True)
 
     n_parameters = sum([p.numel() for p in model.parameters() if p.requires_grad])
     print(f"number of trainable parameters: {n_parameters}")
@@ -317,6 +412,9 @@ def train(config_path):
         criterion.train()
 
         for i, (samples, targets) in enumerate(train_dataloader):
+
+            if i > 5:
+                break
 
             samples = samples.to(device)
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
@@ -351,7 +449,8 @@ def train(config_path):
 
             # Print log
             sys.stdout.write(
-                "\r Training : [Epoch %d/%d] [Batch %d/%d] [lr %f] [total_loss: %f, vfl_loss: %f, boxes_loss: %f]"
+                # "\r Training : [Epoch %d/%d] [Batch %d/%d] [lr %f] [total_loss: %f, vfl_loss: %f, boxes_loss: %f]"
+                "\r Training : [Epoch %d/%d] [Batch %d/%d] [lr %f] [total_loss: %f]"
                 % (
                     epoch,
                     epochs,
@@ -359,10 +458,14 @@ def train(config_path):
                     len(train_dataloader),
                     optimizer.param_groups[0]["lr"],
                     loss.item(),
-                    loss_dict["vfl"].item(),
-                    loss_dict["boxes"].item(),
+                    # loss_dict["vfl"].item(),
+                    # loss_dict["boxes"].item(),
                 )
             )
+
+        #     print(
+        #         f"Training : Epoch {epoch}/{epochs}, Batch {i}/{len(train_dataloader)}, lr { optimizer.param_groups[0]['lr'] }, total_loss: {loss.item()}"
+        #     )
 
         ### validation loop ###
         model.eval()
@@ -370,6 +473,9 @@ def train(config_path):
 
         epoch_val_loss = 0.0
         for i, (samples, targets) in enumerate(val_dataloader):
+
+            if i > 50:
+                break
 
             samples = samples.to(device)
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
@@ -392,22 +498,30 @@ def train(config_path):
 
             # Print log
             sys.stdout.write(
-                "\r Validating : [Epoch %d/%d] [Batch %d/%d] [total_loss: %f, vfl_loss: %f, boxes_loss: %f]"
+                # "\r Validating : [Epoch %d/%d] [Batch %d/%d] [total_loss: %f, vfl_loss: %f, boxes_loss: %f]"
+                "\r Validating : [Epoch %d/%d] [Batch %d/%d] [lr %f] [total_loss: %f]"
                 % (
                     epoch,
                     epochs,
                     i,
                     len(val_dataloader),
+                    optimizer.param_groups[0]["lr"],
                     loss.item(),
-                    loss_dict["vfl"].item(),
-                    loss_dict["boxes"].item(),
+                    # loss_dict["vfl"].item(),
+                    # loss_dict["boxes"].item(),
                 )
             )
 
-            # TODO
-            # --------------
-            #   Plot Samples ???
-            # --------------
+            # print(
+            #     f"Validating : Epoch {epoch}/{epochs}, Batch {i}/{len(val_dataloader)}, total_loss: {loss.item()}"
+            # )
+
+            # # TODO
+            # # -------------------
+            # #   Plot Samples ???
+            # # -------------------
+            # orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
+            # results = postprocessor(outputs, orig_target_sizes)
 
         epoch_val_loss /= len(val_dataloader)
 
@@ -418,6 +532,7 @@ def train(config_path):
             save_model(
                 model,
                 optimizer,
+                out_dir,
                 val_loss=epoch_val_loss,
                 expt_name=expt_name,
                 sv_type="BEST",
@@ -428,6 +543,7 @@ def train(config_path):
             save_model(
                 model,
                 optimizer,
+                out_dir,
                 val_loss=epoch_val_loss,
                 expt_name=expt_name,
                 sv_type="REGULAR",
