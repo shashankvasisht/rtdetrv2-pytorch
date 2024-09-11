@@ -299,6 +299,7 @@ def plot_and_save_batch(
     output_dir,
     batch_id,
     epoch,
+    score_thresh=0.5,
 ):
     """
     Plots and saves a batch of images with bounding boxes and labels.
@@ -308,7 +309,7 @@ def plot_and_save_batch(
     os.makedirs(output_dir, exist_ok=True)
 
     # Define colors for drawing
-    pred_color = (255, 0, 0)  # Red for predictions
+    pred_color = (255, 128, 255)  # Pink for predictions
     gt_color = (0, 255, 0)  # Green for ground truth
 
     # Initialize list to store processed images
@@ -325,6 +326,12 @@ def plot_and_save_batch(
         pred_labels = result_tensor["labels"]
         pred_confidences = result_tensor["scores"]
 
+        # filter low confidence boxes
+        high_conf_indices = pred_confidences > score_thresh
+        pred_boxes = pred_boxes[high_conf_indices]
+        pred_labels = pred_labels[high_conf_indices]
+        pred_confidences = pred_confidences[high_conf_indices]
+
         target_tensor = targets[i]
         gt_boxes = target_tensor["boxes"]
         gt_labels = target_tensor["labels"]
@@ -335,7 +342,7 @@ def plot_and_save_batch(
             pred_boxes,
             colors=pred_color,
             labels=[
-                f"Pred: {label.item()}__{conf:.2f}"
+                f"Pred: {label.item()}--{conf:.2f}"
                 for label, conf in zip(pred_labels, pred_confidences)
             ],
         )
@@ -402,7 +409,7 @@ def train(config_path):
     train_dataloader, val_dataloader = get_dataloaders(config)
 
     if resume_path is not None:
-        model.load_state_dict(torch.load(resume_path)["state_dict"], strict=True)
+        model.load_state_dict(torch.load(resume_path)["model_state_dict"], strict=True)
 
     model.to(device)
     criterion.to(device)
@@ -508,6 +515,7 @@ def train(config_path):
                     output_dir=plot_dir,
                     batch_id=i,
                     epoch=epoch,
+                    score_thresh=0.7,
                 )
 
         epoch_val_loss /= len(val_dataloader)
