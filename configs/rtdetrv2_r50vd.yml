@@ -230,7 +230,7 @@ output_dir: '.\\ckpts'
 plot_dir : '.\\ckpts\\plots'
 log_dir : '.\\ckpts\\logs'
 checkpoint_freq: 10 #epochs
-plot_freq: 10 #iterations
+plot_freq: 100 #iterations
 resume_path : ~
 start_epoch : 0
 expt_name : 'trial'

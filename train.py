@@ -417,9 +417,6 @@ def train(config_path):
 
         for i, (samples, targets) in enumerate(train_dataloader):
 
-            if i > 5:
-                break
-
             samples = samples.to(device)
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
             global_step = epoch * len(train_dataloader) + i
@@ -465,9 +462,6 @@ def train(config_path):
 
         epoch_val_loss = 0.0
         for i, (samples, targets) in enumerate(val_dataloader):
-
-            if i > 50:
-                break
 
             samples = samples.to(device)
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
