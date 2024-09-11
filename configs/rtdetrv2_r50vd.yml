@@ -183,7 +183,7 @@ val_dataloader:
   mode : "val"
   num_imgs_per_folder : 1000
   shuffle: False
-  total_batch_size: 32
+  total_batch_size: 16
   num_workers: 4
   drop_last: False
   # collate_fn:
@@ -225,12 +225,13 @@ num_classes: 20
 class_mapping_path : "D:\\data\\__OTHERDATA__\\OD_Foundation_data\\combined_class_mapping.yaml"
 seed : 1234
 # runtime params
-print_freq: 100
+print_freq: 100 #iterations
 output_dir: '.\\ckpts'
 plot_dir : '.\\ckpts\\plots'
 log_dir : '.\\ckpts\\logs'
-checkpoint_freq: 10
-plot_freq: 10
+checkpoint_freq: 10 #epochs
+plot_freq: 10 #iterations
 resume_path : ~
 start_epoch : 0
 expt_name : 'trial'
+tile_size : 512

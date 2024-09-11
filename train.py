@@ -24,8 +24,10 @@ import argparse
 from torch.cuda.amp.grad_scaler import GradScaler
 from src.utils import get_optim_params
 from data.geo_OD_data import GeoImageryODdata, batch_image_collate_fn
+from PIL import Image
 
 import torchvision.utils as vutils
+import torchvision
 
 
 from torch.utils.tensorboard import SummaryWriter
@@ -285,85 +287,85 @@ def save_model(model, optimizer, out_dir, **kwargs):
     )
 
 
-# def plot_and_save_batch(
-#     image_batch,
-#     pred_boxes_batch,
-#     pred_labels_batch,
-#     pred_confidences_batch,
-#     gt_boxes_batch,
-#     gt_labels_batch,
-#     output_dir,
-#     batch_id,
-# ):
-#     """
-#     Plots and saves a batch of images with bounding boxes and labels.
+def plot_and_save_batch(
+    image_batch,
+    results,
+    targets,
+    output_dir,
+    batch_id,
+    epoch,
+):
+    """
+    Plots and saves a batch of images with bounding boxes and labels.
 
-#     Args:
-#         image_batch (torch.Tensor): A batch of image tensors with shape (N, C, H, W).
-#         pred_boxes_batch (torch.Tensor): A batch of predicted bounding boxes with shape (N, M, 4) in xyxy format.
-#         pred_labels_batch (torch.Tensor): A batch of predicted class labels with shape (N, M).
-#         pred_confidences_batch (torch.Tensor): A batch of predicted confidences with shape (N, M).
-#         gt_boxes_batch (torch.Tensor): A batch of ground truth bounding boxes with shape (N, K, 4) in xyxy format.
-#         gt_labels_batch (torch.Tensor): A batch of ground truth class labels with shape (N, K).
-#         output_dir (str): Directory to save the output images.
-#         batch_id (str): Identifier for the batch to use in the filename.
-#     """
-#     # Ensure output directory exists
-#     os.makedirs(output_dir, exist_ok=True)
+    """
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
 
-#     # Define colors for drawing
-#     pred_color = (255, 0, 0)  # Red for predictions
-#     gt_color = (0, 255, 0)  # Green for ground truth
+    # Define colors for drawing
+    pred_color = (255, 0, 0)  # Red for predictions
+    gt_color = (0, 255, 0)  # Green for ground truth
 
-#     # Initialize list to store processed images
-#     processed_images = []
+    # Initialize list to store processed images
+    processed_images = []
 
-#     for i in range(image_batch.size(0)):
-#         image_tensor = image_batch[i]
+    for i in range(image_batch.size(0)):
 
-#         # Convert image tensor to (H, W, C) and uint8
-#         image_tensor = image_tensor.permute(1, 2, 0).mul(255).byte()
+        image_tensor = image_batch[i]
 
-#         # Get bounding boxes and labels for this image
-#         pred_boxes = pred_boxes_batch[i]
-#         pred_labels = pred_labels_batch[i]
-#         pred_confidences = pred_confidences_batch[i]
-#         gt_boxes = gt_boxes_batch[i]
-#         gt_labels = gt_labels_batch[i]
+        image_tensor = image_tensor.mul(255).byte()
 
-#         # Draw bounding boxes
-#         image_with_pred_boxes = vutils.draw_bounding_boxes(
-#             image_tensor,
-#             pred_boxes,
-#             colors=pred_color,
-#             labels=[
-#                 f"Pred: {label.item()} {conf:.2f}"
-#                 for label, conf in zip(pred_labels, pred_confidences)
-#             ],
-#         )
-#         image_with_all_boxes = vutils.draw_bounding_boxes(
-#             image_with_pred_boxes,
-#             gt_boxes,
-#             colors=gt_color,
-#             labels=[f"GT: {label.item()}" for label in gt_labels],
-#         )
+        result_tensor = results[i]
+        pred_boxes = result_tensor["boxes"]
+        pred_labels = result_tensor["labels"]
+        pred_confidences = result_tensor["scores"]
 
-#         # Convert back to (C, H, W) and append to list
-#         image_with_all_boxes = image_with_all_boxes.permute(
-#             2, 0, 1
-#         )  # Convert to (C, H, W)
-#         processed_images.append(image_with_all_boxes)
+        target_tensor = targets[i]
+        gt_boxes = target_tensor["boxes"]
+        gt_labels = target_tensor["labels"]
 
-#     # Concatenate all images horizontally
-#     concatenated_image = torch.cat(processed_images, dim=2)  # Horizontal concatenation
+        # Draw bounding boxes
+        image_with_pred_boxes = vutils.draw_bounding_boxes(
+            image_tensor,
+            pred_boxes,
+            colors=pred_color,
+            labels=[
+                f"Pred: {label.item()}__{conf:.2f}"
+                for label, conf in zip(pred_labels, pred_confidences)
+            ],
+        )
 
-#     # Save the concatenated image
-#     output_path = os.path.join(output_dir, f"{batch_id}.png")
-#     vutils.save_image(concatenated_image, output_path)
+        image_with_all_boxes = vutils.draw_bounding_boxes(
+            image_with_pred_boxes,
+            gt_boxes,
+            colors=gt_color,
+            labels=[f"GT: {label.item()}" for label in gt_labels],
+        )
 
+        processed_images.append(image_with_all_boxes.cpu())
 
-# # Example usage:
-# # plot_and_save_batch(image_batch, pred_boxes_batch, pred_labels_batch, pred_confidences_batch, gt_boxes_batch, gt_labels_batch, 'output', 'batch1')
+    # Determine grid size
+    num_images = len(processed_images)
+    grid_size = int(torch.ceil(torch.sqrt(torch.tensor(num_images)).float()).item())
+    total_images = grid_size**2
+
+    # Create a black image for padding
+    height, width = processed_images[0].shape[1:]
+    black_image = torch.zeros((3, height, width), dtype=torch.uint8).cpu()
+
+    # Pad the list of images with black images if needed
+    while len(processed_images) < total_images:
+        processed_images.append(black_image)
+
+    # Stack images in a grid
+    grid_image = vutils.make_grid(processed_images, nrow=grid_size, padding=2)
+
+    grid_image_array = grid_image.permute(1, 2, 0).detach().cpu().numpy()
+    result = Image.fromarray(grid_image_array.astype(np.uint8))
+
+    output_path = os.path.join(output_dir, f"epoch_{epoch}_batch_{batch_id}.jpg")
+
+    result.save(output_path)
 
 
 def train(config_path):
@@ -373,14 +375,16 @@ def train(config_path):
     set_seeds(seed=config["seed"])
     device = get_device()
     out_dir, log_dir = make_outdirs(config)
+    plot_dir = config["plot_dir"]
     max_norm = config["clip_max_norm"]
     resume_path = config["resume_path"]
     start_epoch = config["start_epoch"]
     epochs = config["epochs"]
     expt_name = config["expt_name"]
     checkpoint_freq = config["checkpoint_freq"]
-    # plot_freq = getattr(config, "plot_freq", 10)
+    plot_freq = getattr(config, "plot_freq", 10)
     log_dir = config["log_dir"]
+    tile_size = config["tile_size"]
     writer = SummaryWriter(log_dir=log_dir)
 
     model = get_model(config)
@@ -447,25 +451,13 @@ def train(config_path):
             for k, v in loss_dict.items():
                 writer.add_scalar(f"Loss/train_{k}", v.item(), global_step)
 
-            # Print log
-            sys.stdout.write(
-                # "\r Training : [Epoch %d/%d] [Batch %d/%d] [lr %f] [total_loss: %f, vfl_loss: %f, boxes_loss: %f]"
-                "\r Training : [Epoch %d/%d] [Batch %d/%d] [lr %f] [total_loss: %f]"
-                % (
-                    epoch,
-                    epochs,
-                    i,
-                    len(train_dataloader),
-                    optimizer.param_groups[0]["lr"],
-                    loss.item(),
-                    # loss_dict["vfl"].item(),
-                    # loss_dict["boxes"].item(),
-                )
+            print(
+                f"Training : Epoch {epoch}/{epochs}, Batch {i}/{len(train_dataloader)}, lr { optimizer.param_groups[0]['lr'] }, total_loss: {loss.item()}"
             )
 
-        #     print(
-        #         f"Training : Epoch {epoch}/{epochs}, Batch {i}/{len(train_dataloader)}, lr { optimizer.param_groups[0]['lr'] }, total_loss: {loss.item()}"
-        #     )
+        print(
+            "###################################### VALIDATING ... ###############################################"
+        )
 
         ### validation loop ###
         model.eval()
@@ -496,32 +488,28 @@ def train(config_path):
             for k, v in loss_dict.items():
                 writer.add_scalar(f"Loss/val_{k}", v.item(), global_step)
 
-            # Print log
-            sys.stdout.write(
-                # "\r Validating : [Epoch %d/%d] [Batch %d/%d] [total_loss: %f, vfl_loss: %f, boxes_loss: %f]"
-                "\r Validating : [Epoch %d/%d] [Batch %d/%d] [lr %f] [total_loss: %f]"
-                % (
-                    epoch,
-                    epochs,
-                    i,
-                    len(val_dataloader),
-                    optimizer.param_groups[0]["lr"],
-                    loss.item(),
-                    # loss_dict["vfl"].item(),
-                    # loss_dict["boxes"].item(),
-                )
+            print(
+                f"Validating : Epoch {epoch}/{epochs}, Batch {i}/{len(val_dataloader)}, total_loss: {loss.item()}"
             )
 
-            # print(
-            #     f"Validating : Epoch {epoch}/{epochs}, Batch {i}/{len(val_dataloader)}, total_loss: {loss.item()}"
-            # )
+            # # -------------------
+            # #   Plot Samples
+            # # -------------------
+            if i % plot_freq == 0:
+                sample_wh = torch.stack(
+                    [torch.Tensor([tile_size, tile_size]) for t in targets],
+                    dim=0,
+                )
+                results = postprocessor(outputs, sample_wh)
 
-            # # TODO
-            # # -------------------
-            # #   Plot Samples ???
-            # # -------------------
-            # orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
-            # results = postprocessor(outputs, orig_target_sizes)
+                plot_and_save_batch(
+                    samples,
+                    results,
+                    targets,
+                    output_dir=plot_dir,
+                    batch_id=i,
+                    epoch=epoch,
+                )
 
         epoch_val_loss /= len(val_dataloader)
 

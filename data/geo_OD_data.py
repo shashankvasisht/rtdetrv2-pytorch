@@ -133,11 +133,13 @@ class GeoImageryODdata:
         mode: str = "train",  # select between 'train' and 'val'
         num_imgs_per_folder: int = 8000,
         class_mapping_path: str = "class_mapping.yaml",
+        tile_size: int = 512,
         # transforms: Optional[Callable] = None,
     ) -> None:
 
         self.images = []
         self.num_imgs_per_folder = num_imgs_per_folder
+        self.tile_size = tile_size
 
         if mode == "train":
             self.transforms = Compose(
