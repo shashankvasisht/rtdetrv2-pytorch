@@ -207,6 +207,7 @@ def get_lr_schedulers(config, optimizer):
 def get_dataloaders(config):
 
     train_dataloader_params = config["train_dataloader"]
+    tile_size = config["tile_size"]
     train_shuffle = train_dataloader_params["shuffle"]
     train_batch_size = train_dataloader_params["total_batch_size"]
     train_num_workers = train_dataloader_params["num_workers"]
@@ -218,7 +219,11 @@ def get_dataloaders(config):
     class_mapping_path = config["class_mapping_path"]
 
     train_dataset = GeoImageryODdata(
-        train_datarooot, train_mode, train_num_imgs_per_folder, class_mapping_path
+        train_datarooot,
+        train_mode,
+        train_num_imgs_per_folder,
+        class_mapping_path,
+        tile_size,
     )
 
     val_dataloader_params = config["val_dataloader"]
@@ -231,7 +236,7 @@ def get_dataloaders(config):
     val_num_imgs_per_folder = val_dataloader_params["num_imgs_per_folder"]
 
     val_dataset = GeoImageryODdata(
-        val_datarooot, val_mode, val_num_imgs_per_folder, class_mapping_path
+        val_datarooot, val_mode, val_num_imgs_per_folder, class_mapping_path, tile_size
     )
 
     train_dataloader = DataLoader(

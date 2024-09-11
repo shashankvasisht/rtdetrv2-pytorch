@@ -103,29 +103,7 @@ import yaml
 
 class GeoImageryODdata:
 
-    tile_size = 512
     rgb_indices = [0, 1, 2]
-    _train_transforms = [
-        RandomPhotometricDistort(p=0.5),
-        RandomZoomOut(fill=0),
-        RandomIoUCrop(p=0.8),
-        SanitizeBoundingBoxes(min_size=1),
-        RandomHorizontalFlip(),
-        Resize(size=[tile_size, tile_size]),
-        SanitizeBoundingBoxes(min_size=1),
-        ConvertPILImage(dtype="float32", scale=True),
-        ConvertBoxes(fmt="cxcywh", normalize=True),
-    ]
-    _train_policy = {
-        "name": "default",
-        "epoch": 71,
-        "ops": [RandomPhotometricDistort(), RandomZoomOut(), RandomIoUCrop()],
-    }
-    _val_transforms = [
-        Resize(size=[tile_size, tile_size]),
-        ConvertPILImage(dtype="float32", scale=True),
-    ]
-    _val_policy = None
 
     def __init__(
         self,
@@ -140,6 +118,28 @@ class GeoImageryODdata:
         self.images = []
         self.num_imgs_per_folder = num_imgs_per_folder
         self.tile_size = tile_size
+
+        self._train_transforms = [
+            RandomPhotometricDistort(p=0.5),
+            RandomZoomOut(fill=0),
+            RandomIoUCrop(p=0.8),
+            SanitizeBoundingBoxes(min_size=1),
+            RandomHorizontalFlip(),
+            Resize(size=[self.tile_size, self.tile_size]),
+            SanitizeBoundingBoxes(min_size=1),
+            ConvertPILImage(dtype="float32", scale=True),
+            ConvertBoxes(fmt="cxcywh", normalize=True),
+        ]
+        self._train_policy = {
+            "name": "default",
+            "epoch": 71,
+            "ops": [RandomPhotometricDistort(), RandomZoomOut(), RandomIoUCrop()],
+        }
+        self._val_transforms = [
+            Resize(size=[self.tile_size, self.tile_size]),
+            ConvertPILImage(dtype="float32", scale=True),
+        ]
+        self._val_policy = None
 
         if mode == "train":
             self.transforms = Compose(

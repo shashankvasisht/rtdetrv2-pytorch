@@ -234,4 +234,4 @@ plot_freq: 100 #iterations
 resume_path : ~
 start_epoch : 0
 expt_name : 'trial'
-tile_size : 512
+tile_size : 256
