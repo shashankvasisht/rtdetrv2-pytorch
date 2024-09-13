@@ -93,8 +93,7 @@ ema:
   warmups: 2000
 
 
-epochs: 72
-clip_max_norm: 0.1
+
 
 optimizer:
   type: AdamW
@@ -113,13 +112,13 @@ optimizer:
 
 lr_scheduler:
   type: MultiStepLR
-  milestones: [1000]
+  milestones: [20, 60, 90] #epochs
   gamma: 0.1
 
 
 lr_warmup_scheduler:
   type: LinearWarmup
-  warmup_duration: 2000
+  warmup_duration: 1000 #iterations
 
 
 
@@ -152,9 +151,9 @@ train_dataloader:
   #       ops: ['RandomPhotometricDistort', 'RandomZoomOut', 'RandomIoUCrop']
   dataset_root : 'D:\\data\\__OTHERDATA__\\OD_Foundation_data\\train'
   mode : "train"
-  num_imgs_per_folder : 5000
+  num_imgs_per_folder : 10000
   shuffle: True
-  total_batch_size: 16 # total batch size equals to 16 (4 * 4)
+  total_batch_size: 32 # total batch size equals to 16 (4 * 4)
   num_workers: 4
   drop_last: True 
   # collate_fn:
@@ -181,7 +180,7 @@ val_dataloader:
   #       - {type: ConvertPILImage, dtype: 'float32', scale: True}
   dataset_root : 'D:\\data\\__OTHERDATA__\\OD_Foundation_data\\val'
   mode : "val"
-  num_imgs_per_folder : 500
+  num_imgs_per_folder : 1000
   shuffle: False
   total_batch_size: 16
   num_workers: 4
@@ -227,11 +226,11 @@ seed : 1234
 # runtime params
 print_freq: 100 #iterations
 output_dir: '.\\ckpts'
-plot_dir : '.\\ckpts\\plots'
-log_dir : '.\\ckpts\\logs'
-checkpoint_freq: 10 #epochs
-plot_freq: 100 #iterations
+epochs: 200
+clip_max_norm: 0.1
+checkpoint_freq: 20 #epochs
+plot_freq: 50 #iterations
 resume_path : ~
 start_epoch : 0
-expt_name : 'trial'
+expt_name : 'expt0'
 tile_size : 256

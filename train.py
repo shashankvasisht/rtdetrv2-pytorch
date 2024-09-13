@@ -1,4 +1,7 @@
 import torch
+
+# torch.backends.cudnn.benchmark = True
+# torch.cuda.empty_cache()
 import yaml
 import numpy as np
 import random
@@ -71,10 +74,13 @@ def load_config(config_path):
 
 def make_outdirs(config):
     out_dir = config["output_dir"]
-    log_dir = config["log_dir"]
+    expt_name = config["expt_name"]
+    log_dir = os.path.join(out_dir, expt_name, "logs")
+    plot_dir = os.path.join(out_dir, expt_name, "plots")
     os.makedirs(out_dir, exist_ok=True)
     os.makedirs(log_dir, exist_ok=True)
-    return out_dir, log_dir
+    os.makedirs(plot_dir, exist_ok=True)
+    return out_dir, log_dir, plot_dir
 
 
 def get_model(config):
@@ -185,8 +191,11 @@ def get_scaler():
 
 def get_optimizer(config, model):
     optim_conf_params = config["optimizer"]
+    lr = optim_conf_params["lr"]
+    betas = optim_conf_params["betas"]
+    weight_decay = optim_conf_params["weight_decay"]
     model_params = get_optim_params(optim_conf_params, model)
-    return AdamW(params=model_params)
+    return AdamW(params=model_params, lr=lr, betas=betas, weight_decay=weight_decay)
 
 
 def get_lr_schedulers(config, optimizer):
@@ -270,6 +279,7 @@ def save_model(model, optimizer, out_dir, **kwargs):
 
     save_pth = os.path.join(
         out_dir,
+        expt_name,
         "rtdetrv2_{0}_{1}_valloss_{2:.4f}_epoch_{3}.pth".format(
             expt_name, sv_type, val_loss, epoch
         ),
@@ -309,7 +319,7 @@ def plot_and_save_batch(
     os.makedirs(output_dir, exist_ok=True)
 
     # Define colors for drawing
-    pred_color = (255, 128, 255)  # Pink for predictions
+    pred_color = (255, 0, 255)  # Magenta for predictions
     gt_color = (0, 255, 0)  # Green for ground truth
 
     # Initialize list to store processed images
@@ -318,6 +328,8 @@ def plot_and_save_batch(
     for i in range(image_batch.size(0)):
 
         image_tensor = image_batch[i]
+
+        spatial_size = [image_tensor.shape[1], image_tensor.shape[2]]
 
         image_tensor = image_tensor.mul(255).byte()
 
@@ -335,6 +347,10 @@ def plot_and_save_batch(
         target_tensor = targets[i]
         gt_boxes = target_tensor["boxes"]
         gt_labels = target_tensor["labels"]
+        gt_boxes = torchvision.ops.box_convert(
+            gt_boxes, in_fmt="cxcywh", out_fmt="xyxy"
+        )
+        gt_boxes *= torch.tensor(spatial_size[::-1]).tile(2)[None]
 
         # Draw bounding boxes
         image_with_pred_boxes = vutils.draw_bounding_boxes(
@@ -386,16 +402,14 @@ def train(config_path):
     print(config)
     set_seeds(seed=config["seed"])
     device = get_device()
-    out_dir, log_dir = make_outdirs(config)
-    plot_dir = config["plot_dir"]
+    out_dir, log_dir, plot_dir = make_outdirs(config)
     max_norm = config["clip_max_norm"]
     resume_path = config["resume_path"]
     start_epoch = config["start_epoch"]
     epochs = config["epochs"]
     expt_name = config["expt_name"]
     checkpoint_freq = config["checkpoint_freq"]
-    plot_freq = getattr(config, "plot_freq", 10)
-    log_dir = config["log_dir"]
+    plot_freq = config["plot_freq"]
     tile_size = config["tile_size"]
     writer = SummaryWriter(log_dir=log_dir)
 
@@ -461,7 +475,7 @@ def train(config_path):
                 writer.add_scalar(f"Loss/train_{k}", v.item(), global_step)
 
             print(
-                f"Training : Epoch {epoch}/{epochs}, Batch {i}/{len(train_dataloader)}, lr { optimizer.param_groups[0]['lr'] }, total_loss: {loss.item()}"
+                f"Training : Epoch {epoch}/{epochs}, Batch {i}/{len(train_dataloader)}, lr { optimizer.param_groups[1]['lr'] }, total_loss: {loss.item()}"
             )
 
         print(
@@ -473,47 +487,47 @@ def train(config_path):
         criterion.eval()
 
         epoch_val_loss = 0.0
-        for i, (samples, targets) in enumerate(val_dataloader):
+        for j, (samplesV, targetsV) in enumerate(val_dataloader):
 
-            samples = samples.to(device)
-            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+            samplesV = samplesV.to(device)
+            targetsV = [{kv: vv.to(device) for kv, vv in tv.items()} for tv in targetsV]
 
             with torch.no_grad():
-                global_step = epoch * len(val_dataloader) + i
-                metas = dict(epoch=epoch, step=i, global_step=global_step)
-                outputs = model(samples, targets=targets)
-                loss_dict = criterion(outputs, targets, **metas)
-                loss: torch.Tensor = sum(loss_dict.values())
+                global_stepV = epoch * len(val_dataloader) + j
+                metasV = dict(epoch=epoch, step=j, global_step=global_stepV)
+                outputsV = model(samplesV, targets=targetsV)
+                loss_dictV = criterion(outputsV, targetsV, **metasV)
+                lossV: torch.Tensor = sum(loss_dictV.values())
 
-            epoch_val_loss += loss.item()
+            epoch_val_loss += lossV.item()
 
             # --------------
             #  Log Progress
             # --------------
-            writer.add_scalar("loss/val_total", loss.item(), global_step)
-            for k, v in loss_dict.items():
-                writer.add_scalar(f"Loss/val_{k}", v.item(), global_step)
+            writer.add_scalar("loss/val_total", lossV.item(), global_stepV)
+            for kv, vv in loss_dictV.items():
+                writer.add_scalar(f"Loss/val_{kv}", vv.item(), global_stepV)
 
             print(
-                f"Validating : Epoch {epoch}/{epochs}, Batch {i}/{len(val_dataloader)}, total_loss: {loss.item()}"
+                f"Validating : Epoch {epoch}/{epochs}, Batch {j}/{len(val_dataloader)}, total_loss: {lossV.item()}"
             )
 
             # # -------------------
             # #   Plot Samples
             # # -------------------
-            if i % plot_freq == 0:
-                sample_wh = torch.stack(
-                    [torch.Tensor([tile_size, tile_size]) for t in targets],
+            if j % plot_freq == 0:
+                sampleV_wh = torch.stack(
+                    [torch.Tensor([tile_size, tile_size]) for tv in targetsV],
                     dim=0,
                 )
-                results = postprocessor(outputs, sample_wh)
+                resultsV = postprocessor(outputsV, sampleV_wh)
 
                 plot_and_save_batch(
-                    samples,
-                    results,
-                    targets,
+                    samplesV,
+                    resultsV,
+                    targetsV,
                     output_dir=plot_dir,
-                    batch_id=i,
+                    batch_id=j,
                     epoch=epoch,
                     score_thresh=0.7,
                 )

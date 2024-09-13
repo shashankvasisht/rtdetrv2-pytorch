@@ -138,6 +138,7 @@ class GeoImageryODdata:
         self._val_transforms = [
             Resize(size=[self.tile_size, self.tile_size]),
             ConvertPILImage(dtype="float32", scale=True),
+            ConvertBoxes(fmt="cxcywh", normalize=True),
         ]
         self._val_policy = None
 
