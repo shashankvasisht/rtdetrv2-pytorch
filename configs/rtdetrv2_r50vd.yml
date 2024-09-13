@@ -229,7 +229,7 @@ output_dir: '.\\ckpts'
 epochs: 200
 clip_max_norm: 0.1
 checkpoint_freq: 20 #epochs
-plot_freq: 50 #iterations
+plot_freq: 10 #iterations
 resume_path : ~
 start_epoch : 0
 expt_name : 'expt0'
