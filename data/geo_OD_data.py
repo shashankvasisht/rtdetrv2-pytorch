@@ -165,11 +165,14 @@ class GeoImageryODdata:
             images = list(image_fol.glob("*.tif"))
             len_images = len(images)
             random.shuffle(images)
-            if len_images >= self.num_imgs_per_folder:
-                images2append = images[: self.num_imgs_per_folder]
+            if mode == "train":
+                if len_images >= self.num_imgs_per_folder:
+                    images2append = images[: self.num_imgs_per_folder]
+                else:
+                    multiplier = math.ceil(self.num_imgs_per_folder / len_images)
+                    images2append = (images * multiplier)[: self.num_imgs_per_folder]
             else:
-                multiplier = math.ceil(self.num_imgs_per_folder / len_images)
-                images2append = (images * multiplier)[: self.num_imgs_per_folder]
+                images2append = images
             self.images.extend(images2append)
 
         # Retrieving class mapping
